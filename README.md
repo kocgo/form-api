@@ -1,9 +1,6 @@
-# form-api
+# Forms API – Design v5 (Validation Schema Dropped)
 
-
-# Forms API – Latest Design Snapshot
-
-This is the current agreed API design for our config‑driven form system. Implementation comes later.
+This is the current agreed API design for our config‑driven form system **without `validationSchema`**. All validation is expressed via field and form validators.
 
 ---
 
@@ -24,14 +21,13 @@ type DefaultValuesConfig<TValues> =
   | DefaultValuesAsync<TValues>;
 
 interface FormSchemaOptions {
-  // Should submit wait for in‑flight async validators?
+  // Should submit wait for in‑flight async field validators?
   waitForAsyncValidationOnSubmit?: boolean; // default: true
 }
 
 export interface FormSchema<TValues> {
   id: string;
   defaultValues: DefaultValuesConfig<TValues>;
-  validationSchema?: unknown; // Yup/Zod/etc – sync core rules
   fields: FieldConfig<TValues>[];
   formValidators?: {
     sync?: SyncFormValidator<TValues>[];
@@ -43,12 +39,10 @@ export interface FormSchema<TValues> {
 }
 ```
 
-* `defaultValues` can be static, sync factory, or async factory (resolved via React Query and `reset`).
-* `validationSchema` is for basic sync validation.
-* `fields` describe widgets, validators, conditions, props, etc.
-* `formValidators` are cross‑field rules.
-* `effects` describes side‑effects (init, field change, submit success/error).
-* `transformOnSubmit` allows mapping UI model → API model after validation.
+* No `validationSchema` anymore.
+* All validation is done via `FieldConfig.validators` and `formValidators`.
+* `defaultValues` can be static, sync factory, or async factory (engine uses React Query + `reset`).
+* `transformOnSubmit` is the place to coerce/map values before calling `onSubmit`.
 
 ---
 
@@ -67,10 +61,9 @@ export interface FieldWidgetProps<TValues> {
 export interface FieldConditions<TValues> {
   visibleWhen?: (values: TValues) => boolean;   // default: true
   disabledWhen?: (values: TValues) => boolean;  // default: false
-  requiredWhen?: (values: TValues) => boolean;  // optional, informs UI + rules
+  requiredWhen?: (values: TValues) => boolean;  // optional, informs UI + validators
 }
 
-// Field‑level validators
 export type ValidationLevel = 'error' | 'warning' | 'info';
 
 export interface SyncFieldValidator<TValues> {
@@ -107,7 +100,6 @@ export interface FieldValidators<TValues> {
   async?: (AsyncFieldValidatorDirect<TValues> | AsyncFieldValidatorRQ<TValues>)[];
 }
 
-// Widget props can be static, sync, or async
 export type WidgetPropsFactorySync<TValues> = (ctx: {
   values: TValues;
   getValue: <K extends keyof TValues>(name: K) => TValues[K];
@@ -140,14 +132,9 @@ export interface FieldConfig<TValues> {
 ```
 
 * `FieldConfig` connects a `name` to a widget component.
-* `conditions` drive visibility/disabled/required at the UI level.
-* `validators` add extra field‑level rules (sync or async).
-* `props` can be:
-
-  * static object,
-  * sync factory,
-  * async factory resolved via React Query in the engine (with `propsLoading/propsError`).
-* `onValueChange` is for small, local value adjustments.
+* `conditions` drive visibility/disabled/required at UI level.
+* `validators` add field‑level rules only (no global schema).
+* `props` can be static / sync factory / async factory (engine resolves via React Query, passing `propsLoading`/`propsError`).
 
 ---
 
@@ -175,8 +162,10 @@ export interface AsyncFormValidator<TValues> {
 }
 ```
 
-* `fields` indicate which fields a rule relates to (for step‑level validation, UI, etc.).
-* Results can target specific fields or `_form` as a global error.
+* `fields` marks which fields the rule cares about (for step validation, UI, etc.).
+* A `_form` key in the result represents a global error.
+
+All cross‑field and business rules live here (sync or async).
 
 ---
 
@@ -197,7 +186,7 @@ export interface FieldChangeEffect<TValues> {
   id?: string;
   watch: (keyof TValues | string)[]; // fields to watch
   when?: (values: TValues) => boolean;
-  run: (api: EffectApi<TValues>) => void | Promise<void>; // asyncable
+  run: (api: EffectApi<TValues>) => void | Promise<void>;
   debounceMs?: number;
 }
 
@@ -232,13 +221,13 @@ export interface FormEffects<TValues> {
 }
 ```
 
-* `onInit` runs once after defaults are ready.
-* `onFieldChange` runs when watched fields change (with optional debounce, async‑able).
-* `onSubmitSuccess` / `onSubmitError` are optional domain‑level hooks.
+* `onInit`: runs once after default values are ready.
+* `onFieldChange`: runs on watched field changes (asyncable, debounced).
+* `onSubmitSuccess` / `onSubmitError`: optional domain‑level hooks.
 
 ---
 
-## 5. SchemaForm Component & Layout API
+## 5. SchemaForm & Layout API
 
 ```ts
 export interface SchemaFormLayoutProps<TValues> {
@@ -261,24 +250,10 @@ export interface SchemaFormProps<TValues> {
 }
 ```
 
-Usage per form:
+Per form, we still follow the same 3‑file pattern:
 
-* `MyForm.schema.ts` – exports `MyFormValues` + `MyFormSchema`.
-* `MyForm.layout.tsx` – exports `MyFormLayout` using `Field` + layout logic.
-* `MyForm.tsx` – wires everything:
+* `MyForm.schema.ts` → `MyFormValues`, `MyFormSchema`.
+* `MyForm.layout.tsx` → `MyFormLayout` (uses `Field`, `validateFields`, etc.).
+* `MyForm.tsx` → wires everything with `<SchemaForm schema layout onSubmit />`.
 
-```tsx
-export function MyForm() {
-  return (
-    <SchemaForm<MyFormValues>
-      schema={MyFormSchema}
-      layout={MyFormLayout}
-      onSubmit={async (values) => {
-        // call API and optionally return { fieldErrors, formError }
-      }}
-    />
-  );
-}
-```
-
-This snapshot is the current reference for implementing the engine and writing schemas/layouts.
+All validation is now via `validators` and `formValidators`; there is no separate `validationSchema` concept in this engine.
