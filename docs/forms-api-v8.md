@@ -100,12 +100,11 @@ export interface FieldGroupConfig<TValues extends FieldValues, K extends FieldKe
 ```
 
 ### Widget references and props
-Widgets are referenced by registry key or direct component. Async props are resolved externally; widgets receive only the resolved props, keeping loading/error concerns out of widget signatures.
+Widgets are referenced directly by component. Async props are resolved externally; widgets receive only the resolved props, keeping loading/error concerns out of widget signatures.
 
 ```ts
 export type WidgetRef<TValues extends FieldValues, K extends FieldKey<TValues>> =
-  | string
-  | React.ComponentType<WidgetRenderProps<TValues, K>>;
+  React.ComponentType<WidgetRenderProps<TValues, K>>;
 
 export interface WidgetRenderProps<TValues extends FieldValues, K extends FieldKey<TValues>> {
   name: K;
